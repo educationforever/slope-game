@@ -1,98 +1,220 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Slope</title>
+<title>Ultimate Slope 3D</title>
 <style>
-body {
-  margin: 0;
-  overflow: hidden;
-  background: black;
-}
-
-canvas {
-  display: block;
-}
+  body { margin:0; overflow:hidden; background:black; font-family:sans-serif; touch-action: none; }
+  #score { position:absolute; top:20px; left:20px; color:#0f0; font-size:24px; z-index:2; }
+  #fullscreenBtn {
+    position:absolute; top:20px; right:20px; padding:10px 20px; font-size:16px;
+    z-index:2; cursor:pointer; background:#0f0; color:black; border:none; border-radius:5px;
+  }
+  #fullscreenBtn:hover { background:#0c0; }
 </style>
 </head>
 <body>
+<div id="score">Score: 0</div>
+<button id="fullscreenBtn">Fullscreen</button>
 
-<canvas id="game"></canvas>
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
 
 <script>
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
+// --- Scene, Camera, Renderer ---
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
 
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+// --- Postprocessing bloom ---
+const composer = new THREE.EffectComposer(renderer);
+const renderPass = new THREE.RenderPass(scene,camera);
+composer.addPass(renderPass);
+const bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth,window.innerHeight),1.5,0.4,0.85);
+composer.addPass(bloomPass);
 
-let ball = {
-  x: canvas.width / 2,
-  y: canvas.height - 100,
-  radius: 15,
-  speed: 5,
-  dx: 0
-};
+// --- Lights ---
+const ambientLight = new THREE.AmbientLight(0xffffff,0.3);
+scene.add(ambientLight);
+const pointLight = new THREE.PointLight(0x00ff00,1.5,100);
+pointLight.position.set(0,10,10);
+scene.add(pointLight);
 
-let obstacles = [];
-let score = 0;
+// --- Ball ---
+const ballGeo = new THREE.SphereGeometry(1,32,32);
+const ballMat = new THREE.MeshStandardMaterial({color:0x00ff00, emissive:0x00ff00});
+const ball = new THREE.Mesh(ballGeo, ballMat);
+ball.position.y=1;
+scene.add(ball);
 
-document.addEventListener("keydown", (e) => {
-  if (e.key === "ArrowLeft") ball.dx = -ball.speed;
-  if (e.key === "ArrowRight") ball.dx = ball.speed;
-});
+// --- Glow Trail ---
+const trailMat = new THREE.MeshBasicMaterial({color:0x00ff00, transparent:true, opacity:0.3});
+let trailMeshes = [];
 
-document.addEventListener("keyup", () => {
-  ball.dx = 0;
-});
-
-function spawnObstacle() {
-  let width = 100 + Math.random() * 200;
-  let x = Math.random() * (canvas.width - width);
-  obstacles.push({
-    x: x,
-    y: -20,
-    width: width,
-    height: 20
-  });
+// --- Tunnel walls ---
+const wallGeo = new THREE.BoxGeometry(15,8,20);
+const wallMat = new THREE.MeshStandardMaterial({color:0x1111ff, emissive:0x1111ff, wireframe:false});
+let walls = [];
+for(let i=0;i<50;i++){
+  const left = new THREE.Mesh(wallGeo, wallMat);
+  left.position.set(-10,4,-i*20);
+  scene.add(left); walls.push(left);
+  const right = new THREE.Mesh(wallGeo, wallMat);
+  right.position.set(10,4,-i*20);
+  scene.add(right); walls.push(right);
 }
 
-function update() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+// --- Platforms ---
+let platforms = [];
+const platformLength=20;
+const platformWidth=10;
+const gapChance=0.15;
+function createPlatform(z){
+  const geo=new THREE.BoxGeometry(platformWidth,1,platformLength);
+  const mat=new THREE.MeshStandardMaterial({color:0x111111, emissive:0x111111});
+  const p=new THREE.Mesh(geo,mat);
+  p.position.z=z;
+  p.rotation.y=(Math.random()-0.5)*0.2;
+  if(Math.random()<gapChance)p.visible=false;
+  scene.add(p);
+  platforms.push(p);
+}
+for(let i=0;i<50;i++)createPlatform(-i*platformLength);
 
-  // move ball
-  ball.x += ball.dx;
+// --- Particles ---
+const particleGeo=new THREE.BufferGeometry();
+const particleCount=200;
+const positions=new Float32Array(particleCount*3);
+particleGeo.setAttribute('position',new THREE.BufferAttribute(positions,3));
+const particleMat=new THREE.PointsMaterial({color:0xff0000, size:0.2});
+const particles=new THREE.Points(particleGeo,particleMat);
+scene.add(particles);
+let particleActive=false;
 
-  // draw ball
-  ctx.fillStyle = "lime";
-  ctx.beginPath();
-  ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-  ctx.fill();
+// --- Controls ---
+let move=0;
+document.addEventListener("keydown",e=>{
+  if(e.key==="ArrowLeft") move=-0.4;
+  if(e.key==="ArrowRight") move=0.4;
+});
+document.addEventListener("keyup",()=>move=0);
 
-  // obstacles
-  ctx.fillStyle = "red";
-  for (let i = 0; i < obstacles.length; i++) {
-    obstacles[i].y += 6;
-    ctx.fillRect(obstacles[i].x, obstacles[i].y, obstacles[i].width, obstacles[i].height);
+// --- Touch controls for mobile ---
+let touchStartX = null;
+document.addEventListener("touchstart",(e)=>{
+  touchStartX = e.touches[0].clientX;
+});
+document.addEventListener("touchmove",(e)=>{
+  if(touchStartX!==null){
+    const deltaX = e.touches[0].clientX - touchStartX;
+    move = deltaX*0.002; // sensitivity
+  }
+});
+document.addEventListener("touchend",()=>{ move=0; touchStartX=null; });
 
-    if (
-      ball.x + ball.radius > obstacles[i].x &&
-      ball.x - ball.radius < obstacles[i].x + obstacles[i].width &&
-      ball.y + ball.radius > obstacles[i].y &&
-      ball.y - ball.radius < obstacles[i].y + obstacles[i].height
-    ) {
-      alert("Game Over! Score: " + score);
-      document.location.reload();
+// --- Score ---
+let score=0;
+const scoreEl=document.getElementById("score");
+
+// --- Fullscreen ---
+const fsBtn=document.getElementById("fullscreenBtn");
+fsBtn.addEventListener("click",()=>{
+  if(!document.fullscreenElement)document.body.requestFullscreen();
+  else document.exitFullscreen();
+});
+
+// --- Camera shake ---
+let shake=0;
+function applyShake(){
+  if(shake>0){
+    camera.position.x += (Math.random()-0.5)*shake;
+    camera.position.y += (Math.random()-0.5)*shake;
+    shake*=0.9;
+  }
+}
+
+// --- Animate ---
+let speed=0.5;
+function animate(){
+  requestAnimationFrame(animate);
+
+  ball.position.x+=move;
+
+  // Move platforms
+  platforms.forEach(p=>{
+    p.position.z+=speed;
+    if(p.position.z>10){
+      p.position.z-=50*platformLength;
+      p.visible=Math.random()>=gapChance;
+      p.rotation.y=(Math.random()-0.5)*0.2;
+    }
+  });
+
+  // Move walls
+  walls.forEach(w=>{
+    w.position.z+=speed;
+    if(w.position.z>10) w.position.z-=50*20;
+  });
+
+  // Trail
+  const trailSphere=new THREE.Mesh(new THREE.SphereGeometry(0.5,16,16), trailMat);
+  trailSphere.position.copy(ball.position);
+  scene.add(trailSphere);
+  trailMeshes.push(trailSphere);
+  if(trailMeshes.length>60) scene.remove(trailMeshes.shift());
+
+  // Increase speed
+  speed+=0.001;
+  score+=Math.floor(speed*2);
+  scoreEl.textContent="Score: "+score;
+
+  // Collision
+  let onPlatform=false;
+  for(let p of platforms){
+    if(p.visible &&
+      ball.position.x+1>p.position.x-platformWidth/2 &&
+      ball.position.x-1<p.position.x+platformWidth/2 &&
+      ball.position.z+1>p.position.z-platformLength/2 &&
+      ball.position.z-1<p.position.z+platformLength/2){
+        onPlatform=true; break;
     }
   }
 
-  score++;
-  requestAnimationFrame(update);
+  // Fall handling
+  if(!onPlatform && !particleActive){
+    particleActive=true;
+    shake=0.5;
+    for(let i=0;i<particleCount;i++){
+      positions[i*3]=ball.position.x+(Math.random()-0.5)*2;
+      positions[i*3+1]=ball.position.y+(Math.random()-0.5)*2;
+      positions[i*3+2]=ball.position.z+(Math.random()-0.5)*2;
+    }
+    particleGeo.attributes.position.needsUpdate=true;
+    setTimeout(()=>location.reload(),1500);
+  }
+
+  applyShake();
+  camera.position.z=ball.position.z+5;
+  camera.position.x=ball.position.x;
+  camera.position.y=ball.position.y+3;
+  camera.lookAt(ball.position);
+
+  composer.render();
 }
 
-setInterval(spawnObstacle, 1000);
-update();
-</script>
+animate();
 
+// --- Resize ---
+window.addEventListener("resize",()=>{
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect=window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+});
+</script>
 </body>
 </html>
