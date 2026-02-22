@@ -3,14 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Green Neon Slope 3D Ultimate</title>
+<title>Ultimate Green Neon Slope 3D</title>
 <style>
 body{margin:0;overflow:hidden;background:black;font-family:Arial,sans-serif;}
 #menu{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;color:#00ff00;}
 #menu button{padding:15px 30px;font-size:24px;background:#003300;color:#00ff00;border:none;cursor:pointer;border-radius:10px;}
-#score,#highscore{position:absolute;left:20px;z-index:10;color:#00ff00;}
+#score,#highscore,#fpsCounter{position:absolute;left:20px;z-index:10;color:#00ff00;}
 #score{top:20px;font-size:24px;}
 #highscore{top:50px;font-size:20px;}
+#fpsCounter{top:80px;font-size:16px;}
 #gameOver{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:white;font-size:40px;display:none;text-align:center;}
 #gameOver button{padding:10px 20px;font-size:18px;margin-top:20px;cursor:pointer;}
 </style>
@@ -18,12 +19,13 @@ body{margin:0;overflow:hidden;background:black;font-family:Arial,sans-serif;}
 <body>
 
 <div id="menu">
-<h1>Green Neon Slope 3D Ultimate</h1>
+<h1>Ultimate Green Neon Slope 3D</h1>
 <button onclick="startGame()">Play</button>
 </div>
 
 <div id="score">Score: 0</div>
 <div id="highscore">High Score: 0</div>
+<div id="fpsCounter">FPS: 0</div>
 <div id="gameOver">
 Game Over<br>
 <button onclick="restart()">Restart</button>
@@ -35,67 +37,74 @@ Game Over<br>
 <script src="https://cdn.jsdelivr.net/npm/three@0.155.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
 
 <script>
-// ---------------- GLOBALS ----------------
-let scene, camera, renderer, composer;
+// ------------- GLOBALS -------------
+let scene,camera,renderer,composer;
 let ball;
-let obstacles = [], platforms = [], particles = [];
-let speed = 0.05;
-let score = 0, highScore = 0;
-let gameRunning = false;
-let keys = {w:false,a:false,s:false,d:false,ArrowUp:false,ArrowDown:false,ArrowLeft:false,ArrowRight:false};
-let lastScoreTime = 0;
-let ballVelocityX = 0, ballVelocityY = 0, ballVelocityZ = 0;
-let tiltX = 0, tiltZ = 0;
-let mobileTiltX = 0, mobileTiltY = 0;
-let platformZ = 0;
+let obstacles=[],platforms=[],particles=[];
+let speed=0.05;
+let score=0,highScore=0;
+let gameRunning=false;
+let keys={w:false,a:false,s:false,d:false,ArrowUp:false,ArrowDown:false,ArrowLeft:false,ArrowRight:false};
+let lastScoreTime=0;
+let ballVelocityX=0,ballVelocityY=0,ballVelocityZ=0;
+let tiltX=0,tiltZ=0;
+let mobileTiltX=0,mobileTiltY=0;
+let platformZ=0;
 
-// ---------------- INIT SCENE ----------------
+// Jump physics
+let gravity=-0.002;
+let isOnRamp=false;
+
+// FPS counter
+let lastFrameTime=performance.now();
+let fps=0;
+
+// ------------- INIT SCENE -------------
 function initScene(){
-scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x000000,0.02);
+scene=new THREE.Scene();
+scene.fog=new THREE.FogExp2(0x000000,0.02);
 
 // Camera
-camera = new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,0.1,1000);
+camera=new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,0.1,1000);
 camera.position.set(0,5,10);
 camera.lookAt(0,0,0);
 
 // Renderer
-renderer = new THREE.WebGLRenderer({antialias:true});
+renderer=new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(window.innerWidth,window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
 document.body.appendChild(renderer.domElement);
 
-// Post-processing bloom
-composer = new THREE.EffectComposer(renderer);
-let renderPass = new THREE.RenderPass(scene,camera);
-composer.addPass(renderPass);
-let bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth,window.innerHeight),1.5,0.4,0.85);
+// Postprocessing bloom
+composer=new THREE.EffectComposer(renderer);
+composer.addPass(new THREE.RenderPass(scene,camera));
+let bloomPass=new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth,window.innerHeight),1.8,0.4,0.9);
 composer.addPass(bloomPass);
 
 // Lights
 scene.add(new THREE.AmbientLight(0x555555));
-let point = new THREE.PointLight(0x00ff00,1.5,100);
+let point=new THREE.PointLight(0x00ff00,1.5,100);
 point.position.set(0,20,20);
 scene.add(point);
 
-// Grid floor
-let size = 1000, divisions = 50;
-let grid = new THREE.GridHelper(size,divisions,0x00ff00,0x003300);
-grid.rotation.x = Math.PI/2;
-grid.position.y = -0.5;
+// Grid
+let grid=new THREE.GridHelper(1000,50,0x00ff00,0x003300);
+grid.rotation.x=Math.PI/2;
+grid.position.y=-0.5;
 scene.add(grid);
 
 // Ball
-let ballGeom = new THREE.SphereGeometry(1,32,32);
-let ballMat = new THREE.MeshStandardMaterial({color:0x00ff00,emissive:0x00ff00,emissiveIntensity:0.9});
-ball = new THREE.Mesh(ballGeom,ballMat);
+let ballGeom=new THREE.SphereGeometry(1,32,32);
+let ballMat=new THREE.MeshStandardMaterial({color:0x00ff00,emissive:0x00ff00,emissiveIntensity:0.9});
+ball=new THREE.Mesh(ballGeom,ballMat);
 ball.position.set(0,1,0);
 scene.add(ball);
 
 // Highscore
-highScore = localStorage.getItem("highscore")||0;
+highScore=localStorage.getItem("highscore")||0;
 document.getElementById("highscore").innerText="High Score: "+highScore;
 
-// Obstacles and ramps
+// Platforms
 createInitialPlatforms();
 
 // Resize
@@ -109,13 +118,13 @@ composer.setSize(window.innerWidth,window.innerHeight);
 // Mobile tilt
 if(window.DeviceOrientationEvent){
 window.addEventListener("deviceorientation",function(event){
-mobileTiltX = event.gamma/45;
-mobileTiltY = event.beta/45;
+mobileTiltX=event.gamma/45;
+mobileTiltY=event.beta/45;
 },true);
 }
 }
 
-// ---------------- CONTROLS ----------------
+// ------------- CONTROLS -------------
 document.addEventListener("keydown",e=>{
 if(keys.hasOwnProperty(e.key)) keys[e.key]=true;
 });
@@ -123,28 +132,28 @@ document.addEventListener("keyup",e=>{
 if(keys.hasOwnProperty(e.key)) keys[e.key]=false;
 });
 
-// ---------------- PLATFORMS & RAMPS ----------------
+// ------------- PLATFORMS & OBSTACLES -------------
 function createPlatform(z){
-let width=20, depth=15, height=Math.random()*1.5;
-let geo = new THREE.BoxGeometry(width,height,depth);
-let mat = new THREE.MeshStandardMaterial({color:0x003300,emissive:0x00ff00,emissiveIntensity:0.2});
-let plat = new THREE.Mesh(geo,mat);
-plat.position.z = z;
-plat.position.y = -0.5 + height/2;
-plat.rotation.x = (Math.random()-0.5)*0.1;
-plat.rotation.z = (Math.random()-0.5)*0.1;
+let width=20,depth=15,height=Math.random()*1.5;
+let geo=new THREE.BoxGeometry(width,height,depth);
+let mat=new THREE.MeshStandardMaterial({color:0x003300,emissive:0x00ff00,emissiveIntensity:0.2});
+let plat=new THREE.Mesh(geo,mat);
+plat.position.z=z;
+plat.position.y=-0.5+height/2;
+plat.rotation.x=(Math.random()-0.5)*0.1;
+plat.rotation.z=(Math.random()-0.5)*0.1;
 scene.add(plat);
 platforms.push(plat);
 
-// Occasionally add obstacle
+// Sparse obstacles
 if(Math.random()<0.25){
-let size = Math.random()*1+1;
-let obsGeom = new THREE.BoxGeometry(size,size,size);
-let obsMat = new THREE.MeshStandardMaterial({color:0x00ff00,emissive:0x00ff00,emissiveIntensity:1});
-let obs = new THREE.Mesh(obsGeom,obsMat);
-obs.position.z = z - (Math.random()*depth);
-obs.position.x = (Math.random()-0.5)*(width-2);
-obs.position.y = size/2;
+let size=Math.random()*1+1;
+let obsGeom=new THREE.BoxGeometry(size,size,size);
+let obsMat=new THREE.MeshStandardMaterial({color:0x00ff00,emissive:0x00ff00,emissiveIntensity:1});
+let obs=new THREE.Mesh(obsGeom,obsMat);
+obs.position.z=z-(Math.random()*depth);
+obs.position.x=(Math.random()-0.5)*(width-2);
+obs.position.y=size/2;
 scene.add(obs);
 obstacles.push(obs);
 }
@@ -154,106 +163,118 @@ function createInitialPlatforms(){
 platformZ=0;
 for(let i=0;i<50;i++){
 createPlatform(platformZ);
-platformZ -= 15;
+platformZ-=15;
 }
 }
 
-// ---------------- PARTICLES ----------------
-function spawnParticle(x,y,z){
-let geo = new THREE.SphereGeometry(0.05,4,4);
-let mat = new THREE.MeshStandardMaterial({color:0x00ff00,emissive:0x00ff00,emissiveIntensity:0.5});
-let p = new THREE.Mesh(geo,mat);
+// ------------- PARTICLES -------------
+function spawnParticle(x,y,z,scale=1,intensity=0.5){
+let geo=new THREE.SphereGeometry(0.05*scale,4,4);
+let mat=new THREE.MeshStandardMaterial({color:0x00ff00,emissive:0x00ff00,emissiveIntensity:intensity});
+let p=new THREE.Mesh(geo,mat);
 p.position.set(x,y,z);
 particles.push(p);
 scene.add(p);
 }
 
-// ---------------- GAME LOOP ----------------
+// ------------- GAME LOOP -------------
 function animate(time){
 if(!gameRunning) return;
 requestAnimationFrame(animate);
 
-// --- Input movement ---
-ballVelocityX = 0;
-ballVelocityZ = speed;
+// FPS
+let delta=(time-lastFrameTime)/1000;
+lastFrameTime=time;
+fps=Math.round(1/delta);
+document.getElementById("fpsCounter").innerText="FPS: "+fps;
 
-if(keys.w||keys.ArrowUp) ballVelocityZ -= speed*0.6;
-if(keys.s||keys.ArrowDown) ballVelocityZ += speed*0.4;
-if(keys.a||keys.ArrowLeft) ballVelocityX -= speed*0.6;
-if(keys.d||keys.ArrowRight) ballVelocityX += speed*0.6;
+// Input
+ballVelocityX=0; 
+if(keys.w||keys.ArrowUp) ballVelocityZ-=speed*0.6;
+if(keys.s||keys.ArrowDown) ballVelocityZ+=speed*0.4;
+if(keys.a||keys.ArrowLeft) ballVelocityX-=speed*0.6;
+if(keys.d||keys.ArrowRight) ballVelocityX+=speed*0.6;
 
 // Mobile tilt
-ballVelocityX += mobileTiltX*speed;
-ballVelocityZ -= mobileTiltY*speed/2;
+ballVelocityX+=mobileTiltX*speed;
+ballVelocityZ-=mobileTiltY*speed/2;
 
-// Ball tilt
-tiltX = -ballVelocityX*5;
-tiltZ = ballVelocityZ*5;
-ball.rotation.x = tiltZ;
-ball.rotation.z = tiltX;
+// Jump physics
+ballVelocityY+=gravity;
+ball.position.y+=ballVelocityY;
+
+// Detect ramp collision (approx)
+isOnRamp=false;
+platforms.forEach(p=>{
+if(ball.position.z>p.position.z-7 && ball.position.z<p.position.z+7 &&
+   ball.position.x>p.position.x-10 && ball.position.x<p.position.x+10){
+if(ball.position.y<1+p.scaleY){ // touched ramp
+ballVelocityY=0.03 + Math.random()*0.01; // jump impulse
+isOnRamp=true;
+}
+});
+if(isOnRamp) ball.position.y= Math.max(ball.position.y,1);
 
 // Move ball
-ball.position.x += ballVelocityX;
-ball.position.z += ballVelocityZ;
+ball.position.x+=ballVelocityX;
+ball.position.z+=speed;
 
-// Move obstacles forward
+// Obstacles
 obstacles.forEach(obs=>{
-obs.position.z += speed;
+obs.position.z+=speed;
 if(Math.abs(ball.position.z-obs.position.z)<1 && Math.abs(ball.position.x-obs.position.x)<1){
 endGame();
 }
 });
 
-// Spawn particle trails
-spawnParticle(ball.position.x,ball.position.y,ball.position.z);
+// Particle trails
+let trailIntensity=0.5+Math.min(1,Math.abs(ballVelocityX)+Math.abs(speed));
+if(particles.length<150) spawnParticle(ball.position.x,ball.position.y,ball.position.z,1,trailIntensity);
 particles.forEach((p,i)=>{
-p.position.z += 0.05;
+p.position.z+=0.05;
+p.material.emissiveIntensity*=0.95;
 if(p.position.z>ball.position.z+5){scene.remove(p);particles.splice(i,1);}
 });
 
-// Slight camera shake
-camera.position.x = ball.position.x + (Math.random()-0.5)*0.02;
-camera.position.y = 5 + (Math.random()-0.5)*0.02;
-camera.position.z = ball.position.z + 10;
+// Camera shake
+camera.position.x=ball.position.x+(Math.random()-0.5)*0.03;
+camera.position.y=5+(Math.random()-0.5)*0.03+ball.position.y/5;
+camera.position.z=ball.position.z+10;
 camera.lookAt(ball.position);
 
-// Score increment
-if(!lastScoreTime) lastScoreTime = time;
-if(time - lastScoreTime >= 1000){
+// Score
+if(!lastScoreTime) lastScoreTime=time;
+if(time-lastScoreTime>=1000){
 score++;
 document.getElementById("score").innerText="Score: "+score;
-lastScoreTime = time;
+lastScoreTime=time;
 }
 
-// Smooth uphill/downhill
-speed = 0.05 + ball.position.z*0.00002;
-
-// Generate new platforms ahead
-if(ball.position.z - platformZ < 100){
+// Generate new platforms
+if(ball.position.z-platformZ<100){
 createPlatform(platformZ);
-platformZ -= 15;
+platformZ-=15;
 }
 
 // Render
 composer.render();
 }
 
-// ---------------- GAME OVER ----------------
+// ------------- GAME OVER -------------
 function endGame(){
 gameRunning=false;
 document.getElementById("gameOver").style.display="block";
 if(score>highScore){highScore=score; localStorage.setItem("highscore",highScore); document.getElementById("highscore").innerText="High Score: "+highScore;}
 }
 
-// ---------------- START/RESTART ----------------
+// ------------- START/RESTART -------------
 function startGame(){
 document.getElementById("menu").style.display="none";
 gameRunning=true;
 initScene();
-animate();
+requestAnimationFrame(animate);
 }
-
-function restart(){ location.reload(); }
+function restart(){location.reload();}
 </script>
 </body>
 </html>
