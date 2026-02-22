@@ -2,15 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Ultimate Slope 3D</title>
+<title>Ultimate Slope 3D Visible</title>
 <style>
-  body { margin:0; overflow:hidden; background:black; font-family:sans-serif; touch-action: none; }
-  #score { position:absolute; top:20px; left:20px; color:#0f0; font-size:24px; z-index:2; }
-  #fullscreenBtn {
-    position:absolute; top:20px; right:20px; padding:10px 20px; font-size:16px;
-    z-index:2; cursor:pointer; background:#0f0; color:black; border:none; border-radius:5px;
-  }
-  #fullscreenBtn:hover { background:#0c0; }
+body { margin:0; overflow:hidden; background:black; font-family:sans-serif; touch-action: none; }
+#score { position:absolute; top:20px; left:20px; color:#0f0; font-size:24px; z-index:2; }
+#fullscreenBtn {
+  position:absolute; top:20px; right:20px; padding:10px 20px; font-size:16px;
+  z-index:2; cursor:pointer; background:#0f0; color:black; border:none; border-radius:5px;
+}
+#fullscreenBtn:hover { background:#0c0; }
 </style>
 </head>
 <body>
@@ -23,76 +23,77 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
 
 <script>
-// --- Scene, Camera, Renderer ---
+// --- Scene / Camera / Renderer ---
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 2000);
+camera.position.set(0, 5, 15);
+camera.lookAt(0,0,0);
+
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// --- Postprocessing bloom ---
+// --- Postprocessing ---
 const composer = new THREE.EffectComposer(renderer);
-const renderPass = new THREE.RenderPass(scene,camera);
+const renderPass = new THREE.RenderPass(scene, camera);
 composer.addPass(renderPass);
 const bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth,window.innerHeight),1.5,0.4,0.85);
 composer.addPass(bloomPass);
 
 // --- Lights ---
-const ambientLight = new THREE.AmbientLight(0xffffff,0.3);
+const ambientLight = new THREE.AmbientLight(0xffffff,0.5);
 scene.add(ambientLight);
-const pointLight = new THREE.PointLight(0x00ff00,1.5,100);
-pointLight.position.set(0,10,10);
+const pointLight = new THREE.PointLight(0x00ff00,2,200);
+pointLight.position.set(0,15,15);
 scene.add(pointLight);
 
 // --- Ball ---
-const ballGeo = new THREE.SphereGeometry(1,32,32);
-const ballMat = new THREE.MeshStandardMaterial({color:0x00ff00, emissive:0x00ff00});
+const ballGeo = new THREE.SphereGeometry(1.2,32,32);
+const ballMat = new THREE.MeshStandardMaterial({color:0x00ff00, emissive:0x00ff00, emissiveIntensity:1});
 const ball = new THREE.Mesh(ballGeo, ballMat);
-ball.position.y=1;
+ball.position.set(0,1.2,0);
 scene.add(ball);
 
-// --- Glow Trail ---
+// --- Trail ---
 const trailMat = new THREE.MeshBasicMaterial({color:0x00ff00, transparent:true, opacity:0.3});
 let trailMeshes = [];
 
 // --- Tunnel walls ---
-const wallGeo = new THREE.BoxGeometry(15,8,20);
-const wallMat = new THREE.MeshStandardMaterial({color:0x1111ff, emissive:0x1111ff, wireframe:false});
-let walls = [];
+const walls = [];
+const wallGeo = new THREE.BoxGeometry(16,8,20);
 for(let i=0;i<50;i++){
-  const left = new THREE.Mesh(wallGeo, wallMat);
+  const left = new THREE.Mesh(wallGeo, new THREE.MeshStandardMaterial({color:0x1111ff, emissive:0x1111ff, emissiveIntensity:1}));
   left.position.set(-10,4,-i*20);
   scene.add(left); walls.push(left);
-  const right = new THREE.Mesh(wallGeo, wallMat);
+  const right = new THREE.Mesh(wallGeo, new THREE.MeshStandardMaterial({color:0x1111ff, emissive:0x1111ff, emissiveIntensity:1}));
   right.position.set(10,4,-i*20);
   scene.add(right); walls.push(right);
 }
 
 // --- Platforms ---
 let platforms = [];
-const platformLength=20;
-const platformWidth=10;
-const gapChance=0.15;
+const platformLength=20, platformWidth=10, gapChance=0.15;
 function createPlatform(z){
-  const geo=new THREE.BoxGeometry(platformWidth,1,platformLength);
-  const mat=new THREE.MeshStandardMaterial({color:0x111111, emissive:0x111111});
-  const p=new THREE.Mesh(geo,mat);
-  p.position.z=z;
-  p.rotation.y=(Math.random()-0.5)*0.2;
+  const geo = new THREE.BoxGeometry(platformWidth,1,platformLength);
+  const mat = new THREE.MeshStandardMaterial({color:0x222222, emissive:0x1111ff, emissiveIntensity:0.6});
+  const p = new THREE.Mesh(geo, mat);
+  p.position.z = z;
+  p.rotation.y = (Math.random()-0.5)*0.2;
   if(Math.random()<gapChance)p.visible=false;
   scene.add(p);
   platforms.push(p);
 }
-for(let i=0;i<50;i++)createPlatform(-i*platformLength);
+for(let i=0;i<50;i++) createPlatform(-i*platformLength);
 
-// --- Particles ---
-const particleGeo=new THREE.BufferGeometry();
-const particleCount=200;
-const positions=new Float32Array(particleCount*3);
-particleGeo.setAttribute('position',new THREE.BufferAttribute(positions,3));
-const particleMat=new THREE.PointsMaterial({color:0xff0000, size:0.2});
-const particles=new THREE.Points(particleGeo,particleMat);
+// --- Particle system ---
+const particleGeo = new THREE.BufferGeometry();
+const particleCount = 150;
+const positions = new Float32Array(particleCount*3);
+particleGeo.setAttribute('position', new THREE.BufferAttribute(positions,3));
+const particleMat = new THREE.PointsMaterial({color:0xff0000, size:0.25});
+const particles = new THREE.Points(particleGeo, particleMat);
 scene.add(particles);
 let particleActive=false;
 
@@ -104,27 +105,25 @@ document.addEventListener("keydown",e=>{
 });
 document.addEventListener("keyup",()=>move=0);
 
-// --- Touch controls for mobile ---
-let touchStartX = null;
-document.addEventListener("touchstart",(e)=>{
-  touchStartX = e.touches[0].clientX;
-});
+// --- Touch controls ---
+let touchStartX=null;
+document.addEventListener("touchstart",(e)=>{touchStartX=e.touches[0].clientX;});
 document.addEventListener("touchmove",(e)=>{
   if(touchStartX!==null){
     const deltaX = e.touches[0].clientX - touchStartX;
-    move = deltaX*0.002; // sensitivity
+    move = deltaX*0.003;
   }
 });
 document.addEventListener("touchend",()=>{ move=0; touchStartX=null; });
 
 // --- Score ---
 let score=0;
-const scoreEl=document.getElementById("score");
+const scoreEl = document.getElementById("score");
 
 // --- Fullscreen ---
-const fsBtn=document.getElementById("fullscreenBtn");
-fsBtn.addEventListener("click",()=>{
-  if(!document.fullscreenElement)document.body.requestFullscreen();
+const fsBtn = document.getElementById("fullscreenBtn");
+fsBtn.addEventListener("click", ()=>{
+  if(!document.fullscreenElement) document.body.requestFullscreen();
   else document.exitFullscreen();
 });
 
@@ -134,58 +133,57 @@ function applyShake(){
   if(shake>0){
     camera.position.x += (Math.random()-0.5)*shake;
     camera.position.y += (Math.random()-0.5)*shake;
-    shake*=0.9;
+    shake *= 0.9;
   }
 }
 
 // --- Animate ---
-let speed=0.5;
+let speed=0.6;
 function animate(){
   requestAnimationFrame(animate);
 
-  ball.position.x+=move;
+  ball.position.x += move;
 
   // Move platforms
   platforms.forEach(p=>{
-    p.position.z+=speed;
+    p.position.z += speed;
     if(p.position.z>10){
-      p.position.z-=50*platformLength;
-      p.visible=Math.random()>=gapChance;
-      p.rotation.y=(Math.random()-0.5)*0.2;
+      p.position.z -= 50*platformLength;
+      p.visible = Math.random()>=gapChance;
+      p.rotation.y = (Math.random()-0.5)*0.2;
     }
   });
 
   // Move walls
   walls.forEach(w=>{
-    w.position.z+=speed;
-    if(w.position.z>10) w.position.z-=50*20;
+    w.position.z += speed;
+    if(w.position.z>10) w.position.z -= 50*20;
   });
 
   // Trail
-  const trailSphere=new THREE.Mesh(new THREE.SphereGeometry(0.5,16,16), trailMat);
+  const trailSphere = new THREE.Mesh(new THREE.SphereGeometry(0.5,16,16), trailMat);
   trailSphere.position.copy(ball.position);
   scene.add(trailSphere);
   trailMeshes.push(trailSphere);
   if(trailMeshes.length>60) scene.remove(trailMeshes.shift());
 
-  // Increase speed
-  speed+=0.001;
-  score+=Math.floor(speed*2);
-  scoreEl.textContent="Score: "+score;
+  // Speed & score
+  speed += 0.001;
+  score += Math.floor(speed*2);
+  scoreEl.textContent = "Score: "+score;
 
   // Collision
   let onPlatform=false;
   for(let p of platforms){
     if(p.visible &&
-      ball.position.x+1>p.position.x-platformWidth/2 &&
-      ball.position.x-1<p.position.x+platformWidth/2 &&
-      ball.position.z+1>p.position.z-platformLength/2 &&
-      ball.position.z-1<p.position.z+platformLength/2){
-        onPlatform=true; break;
+       ball.position.x+1>p.position.x-platformWidth/2 &&
+       ball.position.x-1<p.position.x+platformWidth/2 &&
+       ball.position.z+1>p.position.z-platformLength/2 &&
+       ball.position.z-1<p.position.z+platformLength/2){
+         onPlatform=true; break;
     }
   }
 
-  // Fall handling
   if(!onPlatform && !particleActive){
     particleActive=true;
     shake=0.5;
@@ -199,9 +197,9 @@ function animate(){
   }
 
   applyShake();
-  camera.position.z=ball.position.z+5;
-  camera.position.x=ball.position.x;
-  camera.position.y=ball.position.y+3;
+  camera.position.z = ball.position.z + 15;
+  camera.position.x = ball.position.x;
+  camera.position.y = ball.position.y + 5;
   camera.lookAt(ball.position);
 
   composer.render();
@@ -210,9 +208,9 @@ function animate(){
 animate();
 
 // --- Resize ---
-window.addEventListener("resize",()=>{
+window.addEventListener("resize", ()=>{
   renderer.setSize(window.innerWidth, window.innerHeight);
-  camera.aspect=window.innerWidth/window.innerHeight;
+  camera.aspect = window.innerWidth/window.innerHeight;
   camera.updateProjectionMatrix();
 });
 </script>
