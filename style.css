@@ -1,8 +1,0 @@
-body { margin:0; overflow:hidden; background:black; font-family:sans-serif; touch-action:none; }
-#menu { position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); color:#0f0; text-align:center; }
-#menu button { margin:10px; padding:10px 20px; font-size:18px; background:#0f0; border:none; border-radius:5px; cursor:pointer; }
-#menu button:hover { background:#0c0; }
-#gameUI { display:none; position:absolute; top:10px; left:10px; z-index:2; color:#0f0; }
-#score, #highscore { font-size:20px; }
-#fullscreenBtn { position:absolute; top:10px; right:10px; z-index:2; padding:8px 16px; font-size:16px; background:#0f0; color:black; border:none; border-radius:5px; cursor:pointer; }
-#fullscreenBtn:hover { background:#0c0; }
