@@ -47,17 +47,17 @@ let gameRunning=false;
 let keys={w:false,a:false,s:false,d:false,ArrowUp:false,ArrowDown:false,ArrowLeft:false,ArrowRight:false};
 let lastScoreTime=0;
 let ballVelocityX=0,ballVelocityY=0,ballVelocityZ=0;
-let tiltX=0,tiltZ=0;
 let mobileTiltX=0,mobileTiltY=0;
 let platformZ=0;
-
-// Jump physics
 let gravity=-0.002;
 let isOnRamp=false;
 
-// FPS counter
+// FPS
 let lastFrameTime=performance.now();
 let fps=0;
+
+// Gradual platform loader
+let initialPlatformCount=0;
 
 // ------------- INIT SCENE -------------
 function initScene(){
@@ -72,10 +72,10 @@ camera.lookAt(0,0,0);
 // Renderer
 renderer=new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(window.innerWidth,window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.setPixelRatio(navigator.userAgent.includes("Mobile")?1:Math.min(window.devicePixelRatio,2));
 document.body.appendChild(renderer.domElement);
 
-// Postprocessing bloom
+// Post-processing bloom
 composer=new THREE.EffectComposer(renderer);
 composer.addPass(new THREE.RenderPass(scene,camera));
 let bloomPass=new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth,window.innerHeight),1.8,0.4,0.9);
@@ -104,8 +104,13 @@ scene.add(ball);
 highScore=localStorage.getItem("highscore")||0;
 document.getElementById("highscore").innerText="High Score: "+highScore;
 
-// Platforms
-createInitialPlatforms();
+// Mobile tilt
+if(window.DeviceOrientationEvent){
+window.addEventListener("deviceorientation",function(event){
+mobileTiltX=event.gamma/45;
+mobileTiltY=event.beta/45;
+},true);
+}
 
 // Resize
 window.addEventListener("resize",()=>{
@@ -114,25 +119,13 @@ camera.updateProjectionMatrix();
 renderer.setSize(window.innerWidth,window.innerHeight);
 composer.setSize(window.innerWidth,window.innerHeight);
 });
-
-// Mobile tilt
-if(window.DeviceOrientationEvent){
-window.addEventListener("deviceorientation",function(event){
-mobileTiltX=event.gamma/45;
-mobileTiltY=event.beta/45;
-},true);
-}
 }
 
 // ------------- CONTROLS -------------
-document.addEventListener("keydown",e=>{
-if(keys.hasOwnProperty(e.key)) keys[e.key]=true;
-});
-document.addEventListener("keyup",e=>{
-if(keys.hasOwnProperty(e.key)) keys[e.key]=false;
-});
+document.addEventListener("keydown",e=>{if(keys.hasOwnProperty(e.key)) keys[e.key]=true;});
+document.addEventListener("keyup",e=>{if(keys.hasOwnProperty(e.key)) keys[e.key]=false;});
 
-// ------------- PLATFORMS & OBSTACLES -------------
+// ------------- PLATFORM FUNCTIONS -------------
 function createPlatform(z){
 let width=20,depth=15,height=Math.random()*1.5;
 let geo=new THREE.BoxGeometry(width,height,depth);
@@ -159,12 +152,13 @@ obstacles.push(obs);
 }
 }
 
-function createInitialPlatforms(){
-platformZ=0;
-for(let i=0;i<50;i++){
+// Gradual initial platforms
+function generateInitialPlatforms(){
+if(initialPlatformCount>=50) return;
 createPlatform(platformZ);
 platformZ-=15;
-}
+initialPlatformCount++;
+setTimeout(generateInitialPlatforms,10);
 }
 
 // ------------- PARTICLES -------------
@@ -179,7 +173,7 @@ scene.add(p);
 
 // ------------- GAME LOOP -------------
 function animate(time){
-if(!gameRunning) return;
+if(!gameRunning || !scene || !ball) return;
 requestAnimationFrame(animate);
 
 // FPS
@@ -190,6 +184,7 @@ document.getElementById("fpsCounter").innerText="FPS: "+fps;
 
 // Input
 ballVelocityX=0; 
+ballVelocityZ=speed;
 if(keys.w||keys.ArrowUp) ballVelocityZ-=speed*0.6;
 if(keys.s||keys.ArrowDown) ballVelocityZ+=speed*0.4;
 if(keys.a||keys.ArrowLeft) ballVelocityX-=speed*0.6;
@@ -202,18 +197,13 @@ ballVelocityZ-=mobileTiltY*speed/2;
 // Jump physics
 ballVelocityY+=gravity;
 ball.position.y+=ballVelocityY;
-
-// Detect ramp collision (approx)
 isOnRamp=false;
 platforms.forEach(p=>{
 if(ball.position.z>p.position.z-7 && ball.position.z<p.position.z+7 &&
-   ball.position.x>p.position.x-10 && ball.position.x<p.position.x+10){
-if(ball.position.y<1+p.scaleY){ // touched ramp
-ballVelocityY=0.03 + Math.random()*0.01; // jump impulse
-isOnRamp=true;
-}
+ball.position.x>p.position.x-10 && ball.position.x<p.position.x+10){
+if(ball.position.y<1+p.scaleY){ballVelocityY=0.03+Math.random()*0.01; isOnRamp=true;}
 });
-if(isOnRamp) ball.position.y= Math.max(ball.position.y,1);
+if(isOnRamp) ball.position.y=Math.max(ball.position.y,1);
 
 // Move ball
 ball.position.x+=ballVelocityX;
@@ -227,7 +217,7 @@ endGame();
 }
 });
 
-// Particle trails
+// Particles
 let trailIntensity=0.5+Math.min(1,Math.abs(ballVelocityX)+Math.abs(speed));
 if(particles.length<150) spawnParticle(ball.position.x,ball.position.y,ball.position.z,1,trailIntensity);
 particles.forEach((p,i)=>{
@@ -244,17 +234,10 @@ camera.lookAt(ball.position);
 
 // Score
 if(!lastScoreTime) lastScoreTime=time;
-if(time-lastScoreTime>=1000){
-score++;
-document.getElementById("score").innerText="Score: "+score;
-lastScoreTime=time;
-}
+if(time-lastScoreTime>=1000){score++; document.getElementById("score").innerText="Score: "+score; lastScoreTime=time;}
 
-// Generate new platforms
-if(ball.position.z-platformZ<100){
-createPlatform(platformZ);
-platformZ-=15;
-}
+// New platforms
+if(ball.position.z-platformZ<100) createPlatform(platformZ), platformZ-=15;
 
 // Render
 composer.render();
@@ -272,6 +255,7 @@ function startGame(){
 document.getElementById("menu").style.display="none";
 gameRunning=true;
 initScene();
+generateInitialPlatforms(); // gradual load
 requestAnimationFrame(animate);
 }
 function restart(){location.reload();}
