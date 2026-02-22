@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Green Neon Slope Runner</title>
+<title>Green Neon Slope 3D</title>
 <style>
 body {margin:0; overflow:hidden; background:black; font-family:Arial,sans-serif;}
 #menu {position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;color:#00ff00;}
@@ -18,7 +18,7 @@ body {margin:0; overflow:hidden; background:black; font-family:Arial,sans-serif;
 <body>
 
 <div id="menu">
-  <h1>Green Neon Slope Runner</h1>
+  <h1>Green Neon Slope 3D</h1>
   <button onclick="startGame()">Play</button>
 </div>
 
@@ -32,149 +32,156 @@ body {margin:0; overflow:hidden; background:black; font-family:Arial,sans-serif;
 <script src="https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.min.js"></script>
 
 <script>
-// ---------------- GLOBALS ----------------
 let scene, camera, renderer;
-let ball, obstacles=[], trailParticles=[];
-let platformWidth = 20, platformDepth = 200;
-let speed = 0.08, score=0, highScore=0;
+let ball, trailParticles=[], platforms=[], obstacles=[];
+let speed = 0.08, score = 0, highScore = 0;
 let gameRunning = false;
-let keys = {w:false,a:false,s:false,d:false};
-let obstacleFrequency = 0.1;
-let bgMusic;
+let keys = {w:false,a:false,s:false,d:false,ArrowUp:false,ArrowDown:false,ArrowLeft:false,ArrowRight:false};
+let platformZ = 0;
 
 // ---------------- INIT SCENE ----------------
 function initScene(){
     scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x000000,0.02);
-    
+    scene.fog = new THREE.FogExp2(0x000000, 0.02);
+
     camera = new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,0.1,1000);
     renderer = new THREE.WebGLRenderer({antialias:true});
     renderer.setSize(window.innerWidth,window.innerHeight);
     renderer.setClearColor(0x000000);
     document.body.appendChild(renderer.domElement);
-    
-    let ambientLight = new THREE.AmbientLight(0x555555);
-    scene.add(ambientLight);
-    
+
+    // Lights
+    scene.add(new THREE.AmbientLight(0x555555));
     let pointLight = new THREE.PointLight(0x00ff00,1.5,100);
     pointLight.position.set(0,20,20);
     scene.add(pointLight);
-    
-    // neon tunnel
-    let tunnelGeo = new THREE.CylinderGeometry(30,30,1000,64,true);
-    let tunnelMat = new THREE.MeshBasicMaterial({color:0x00ff00, wireframe:true, transparent:true, opacity:0.03, side:THREE.BackSide});
-    let tunnel = new THREE.Mesh(tunnelGeo,tunnelMat);
-    tunnel.rotation.x=Math.PI/2;
-    scene.add(tunnel);
-    
-    // wide static platform
-    let platGeo = new THREE.BoxGeometry(platformWidth,1,platformDepth);
-    let platMat = new THREE.MeshStandardMaterial({color:0x003300, emissive:0x00ff00, emissiveIntensity:0.2});
-    let platform = new THREE.Mesh(platGeo,platMat);
-    platform.position.z = -platformDepth/2 + 5;
-    platform.position.y = -0.5;
-    scene.add(platform);
-    
-    // ball
+
+    // Grid floor
+    let gridHelper = new THREE.GridHelper(40, 20, 0x00ff00, 0x003300);
+    gridHelper.rotation.x = Math.PI/2;
+    scene.add(gridHelper);
+
+    // Ball
     let ballGeom = new THREE.SphereGeometry(1,32,32);
     let ballMat = new THREE.MeshStandardMaterial({color:0x00ff00, emissive:0x00ff00, emissiveIntensity:0.9});
     ball = new THREE.Mesh(ballGeom,ballMat);
     ball.position.y = 1;
+    ball.position.z = 0;
     scene.add(ball);
-    
+
     camera.position.y = 5;
     camera.position.z = 10;
     camera.lookAt(ball.position);
-    
-    // sounds
-    bgMusic = new Audio("https://freesound.org/data/previews/250/250629_4486188-lq.mp3");
-    bgMusic.loop=true; bgMusic.volume=0.3; bgMusic.play();
-    
+
     highScore = localStorage.getItem("highscore")||0;
     document.getElementById("highscore").innerText = "High Score: "+highScore;
-    
-    window.addEventListener("resize",()=>{camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();renderer.setSize(window.innerWidth,window.innerHeight);});
+
+    window.addEventListener("resize",()=>{
+        camera.aspect = window.innerWidth/window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth,window.innerHeight);
+    });
+
+    createInitialPlatforms();
 }
 
 // ---------------- CONTROLS ----------------
 document.addEventListener("keydown", e=>{
-    if(e.key=="w") keys.w=true;
-    if(e.key=="a") keys.a=true;
-    if(e.key=="s") keys.s=true;
-    if(e.key=="d") keys.d=true;
+    if(keys.hasOwnProperty(e.key)) keys[e.key]=true;
 });
 document.addEventListener("keyup", e=>{
-    if(e.key=="w") keys.w=false;
-    if(e.key=="a") keys.a=false;
-    if(e.key=="s") keys.s=false;
-    if(e.key=="d") keys.d=false;
+    if(keys.hasOwnProperty(e.key)) keys[e.key]=false;
 });
 
-// ---------------- OBSTACLES ----------------
-function spawnObstacle(){
-    let geo = new THREE.BoxGeometry(2,2,2);
-    let mat = new THREE.MeshStandardMaterial({color:0x00ff00,emissive:0x00ff00,emissiveIntensity:1});
-    let obs = new THREE.Mesh(geo,mat);
-    obs.position.z = ball.position.z - platformDepth - Math.random()*50;
-    obs.position.x = (Math.random()-0.5)*(platformWidth-2);
-    obs.position.y = 1;
-    scene.add(obs);
-    obstacles.push(obs);
+// ---------------- PLATFORM GENERATION ----------------
+function createPlatform(z){
+    let width = 20;
+    let depth = 15;
+    let geo = new THREE.BoxGeometry(width, 1, depth);
+    let mat = new THREE.MeshStandardMaterial({color:0x003300, emissive:0x00ff00, emissiveIntensity:0.2});
+    let plat = new THREE.Mesh(geo, mat);
+    plat.position.z = z;
+    plat.position.y = -0.5;
+    plat.rotation.x = (Math.random()-0.5)*0.1;
+    plat.rotation.z = (Math.random()-0.5)*0.2;
+    scene.add(plat);
+    platforms.push(plat);
+
+    // Obstacles
+    let numObs = Math.floor(Math.random()*4)+2;
+    for(let i=0;i<numObs;i++){
+        let obsGeo = new THREE.BoxGeometry(2,2,2);
+        let obsMat = new THREE.MeshStandardMaterial({color:0x00ff00,emissive:0x00ff00,emissiveIntensity:1});
+        let obs = new THREE.Mesh(obsGeo, obsMat);
+        obs.position.z = z - Math.random()*depth + depth/2;
+        obs.position.x = (Math.random()-0.5)*(width-2);
+        obs.position.y = 1;
+        scene.add(obs);
+        obstacles.push(obs);
+    }
 }
 
-// ---------------- PARTICLE TRAIL ----------------
+function createInitialPlatforms(){
+    for(let i=0;i<20;i++){
+        createPlatform(platformZ);
+        platformZ -= 15;
+    }
+}
+
+// ---------------- PARTICLE TRAILS ----------------
 function spawnTrail(x,y,z){
     let geo = new THREE.SphereGeometry(0.05,4,4);
-    let mat = new THREE.MeshStandardMaterial({color:0x00ff00,emissive:0x00ff00,emissiveIntensity:0.5});
+    let mat = new THREE.MeshStandardMaterial({color:0x00ff00, emissive:0x00ff00, emissiveIntensity:0.5});
     let p = new THREE.Mesh(geo,mat);
     p.position.set(x,y,z);
-    p.velocity={x:0,y:0,z:0};
-    scene.add(p);
     trailParticles.push(p);
+    scene.add(p);
 }
 
 // ---------------- GAME LOOP ----------------
 function animate(){
     if(!gameRunning) return;
     requestAnimationFrame(animate);
-    
+
     // movement
-    if(keys.w) ball.position.z -= speed*1.2;
-    if(keys.s) ball.position.z += speed*0.8;
-    if(keys.a) ball.position.x -= speed*1.2;
-    if(keys.d) ball.position.x += speed*1.2;
-    
-    // spawn obstacles
-    if(Math.random()<obstacleFrequency) spawnObstacle();
-    
+    if(keys.w||keys.ArrowUp) ball.position.z -= speed*1.2;
+    if(keys.s||keys.ArrowDown) ball.position.z += speed*0.8;
+    if(keys.a||keys.ArrowLeft) ball.position.x -= speed*1.2;
+    if(keys.d||keys.ArrowRight) ball.position.x += speed*1.2;
+
+    // generate new platforms ahead
+    if(ball.position.z - platformZ < 100){
+        createPlatform(platformZ);
+        platformZ -= 15;
+    }
+
     // obstacle collision
     for(let obs of obstacles){
         if(Math.abs(ball.position.x-obs.position.x)<1 && Math.abs(ball.position.z-obs.position.z)<1){
             endGame();
         }
-        obs.position.z += speed; // move obstacles toward player
+        obs.position.z += speed;
     }
-    
+
     // particle trail
-    spawnTrail(ball.position.x, ball.position.y, ball.position.z);
+    spawnTrail(ball.position.x,ball.position.y,ball.position.z);
     trailParticles.forEach((p,i)=>{
         p.position.z += 0.05;
         if(p.position.z>ball.position.z+5){scene.remove(p);trailParticles.splice(i,1);}
     });
-    
+
     // score
     score++;
     document.getElementById("score").innerText = "Score: "+score;
-    
+
     // difficulty ramp
-    speed += 0.00001;
-    obstacleFrequency += 0.000001;
-    
+    speed += 0.00002;
+
     // camera follow
     camera.position.z = ball.position.z + 10;
     camera.position.x = ball.position.x;
     camera.lookAt(ball.position);
-    
+
     renderer.render(scene,camera);
 }
 
@@ -188,14 +195,12 @@ function endGame(){
 // ---------------- START/RESTART ----------------
 function startGame(){
     document.getElementById("menu").style.display="none";
-    gameRunning=true;
+    gameRunning = true;
     initScene();
     animate();
 }
 
-function restart(){
-    location.reload();
-}
+function restart(){ location.reload(); }
 </script>
 </body>
 </html>
