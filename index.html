@@ -1,1 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ultimate Neon Slope Runner</title>
+<style>
+body {margin:0; overflow:hidden; background:black; font-family:Arial,sans-serif;}
+#score,#highscore{position:absolute; left:20px; z-index:10; color:#00ffcc;}
+#score{top:20px;font-size:24px;}
+#highscore{top:50px;font-size:20px;}
+#gameOver{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:white;font-size:40px;display:none;text-align:center;}
+button{padding:10px 20px;font-size:18px;margin-top:20px;cursor:pointer;}
+</style>
+</head>
+<body>
+<div id="score">Score: 0</div>
+<div id="highscore">High Score: 0</div>
+<div id="gameOver">
+Game Over<br>
+<button onclick="restart()">Restart</button>
+</div>
 
+<script src="https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.min.js"></script>
+
+<script>
+// ---------------- SCENE ----------------
+let scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x000000, 0.02);
+
+let camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+let renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0x000000);
+document.body.appendChild(renderer.domElement);
+
+// ---------------- LIGHTS ----------------
+let ambientLight = new THREE.AmbientLight(0x555555);
+scene.add(ambientLight);
+let pointLight = new THREE.PointLight(0x00ffcc, 1.5, 100);
+pointLight.position.set(0,15,15);
+scene.add(pointLight);
+
+// ---------------- NEON TUNNEL BACKGROUND ----------------
+let tunnelGeometry = new THREE.CylinderGeometry(30,30,1000,64,true);
+let tunnelMaterial = new THREE.MeshBasicMaterial({color:0x00ffcc, wireframe:true, transparent:true, opacity:0.05, side:THREE.BackSide});
+let tunnel = new THREE.Mesh(tunnelGeometry,tunnelMaterial);
+tunnel.rotation.x=Math.PI/2;
+scene.add(tunnel);
+
+// ---------------- BALL ----------------
+let ballGeom = new THREE.SphereGeometry(1,32,32);
+let ballMat = new THREE.MeshStandardMaterial({color:0x00ffcc, emissive:0x00ffcc, emissiveIntensity:0.9});
+let ball = new THREE.Mesh(ballGeom, ballMat);
+ball.position.y=1;
+scene.add(ball);
+
+// Particle trail
+let trailParticles=[];
+function spawnTrail(x,y,z){
+    let geo=new THREE.SphereGeometry(0.05,4,4);
+    let mat=new THREE.MeshStandardMaterial({color:0x00ffcc,emissive:0x00ffcc,emissiveIntensity:0.5});
+    let p=new THREE.Mesh(geo,mat);
+    p.position.set(x,y,z);
+    p.velocity={x:0,y:0,z:0};
+    scene.add(p);
+    trailParticles.push(p);
+}
+
+// ---------------- PLATFORMS ----------------
+let platforms=[], obstacles=[];
+function createPlatform(z){
+    let hue = Math.random();
+    let mat = new THREE.MeshStandardMaterial({color:new THREE.Color().setHSL(hue,0.9,0.5), emissive:new THREE.Color().setHSL(hue,0.8,0.5), emissiveIntensity:0.7});
+    let geo = new THREE.BoxGeometry(6,1,15);
+    let platform = new THREE.Mesh(geo, mat);
+    platform.position.z = z;
+    platform.position.x = (Math.random()-0.5)*3;
+    scene.add(platform);
+    platforms.push(platform);
+
+    // obstacle
+    if(Math.random()<0.25){
+        let obsGeo = new THREE.BoxGeometry(1.5,1.5,1.5);
+        let obsMat = new THREE.MeshStandardMaterial({color:0xff00ff, emissive:0xff00ff, emissiveIntensity:1});
+        let obs = new THREE.Mesh(obsGeo, obsMat);
+        obs.position.set(platform.position.x,0.75,z+Math.random()*3-1.5);
+        scene.add(obs);
+        obstacles.push(obs);
+    }
+}
+for(let i=0;i<20;i++) createPlatform(-i*15);
+
+// ---------------- CAMERA ----------------
+camera.position.z=10;
+camera.position.y=5;
+camera.lookAt(ball.position);
+
+// ---------------- CONTROLS ----------------
+let moveLeft=false, moveRight=false;
+
+// Keyboard and touch fallback
+document.addEventListener("keydown", e=>{
+    if(e.key==="ArrowLeft") moveLeft=true;
+    if(e.key==="ArrowRight") moveRight=true;
+});
+document.addEventListener("keyup", e=>{
+    if(e.key==="ArrowLeft") moveLeft=false;
+    if(e.key==="ArrowRight") moveRight=false;
+});
+window.addEventListener("touchstart", e=>{
+    if(e.touches[0].clientX<window.innerWidth/2) moveLeft=true;
+    else moveRight=true;
+});
+window.addEventListener("touchend", ()=>{ moveLeft=false; moveRight=false; });
+
+// Tilt controls
+window.addEventListener('deviceorientation', function(event){
+    let gamma = event.gamma; // left/right tilt
+    if(gamma>15) moveRight=true, moveLeft=false;
+    else if(gamma<-15) moveLeft=true, moveRight=false;
+    else moveLeft=false, moveRight=false;
+}, true);
+
+// ---------------- SOUNDS ----------------
+let crashSound = new Audio("https://freesound.org/data/previews/151/151022_2696661-lq.mp3");
+let bgMusic = new Audio("https://freesound.org/data/previews/250/250629_4486188-lq.mp3");
+bgMusic.loop=true; bgMusic.volume=0.3; bgMusic.play();
+
+// ---------------- GAME VARIABLES ----------------
+let speed = 0.08;
+let score=0;
+let highScore=localStorage.getItem("highscore")||0;
+let gameRunning=true;
+document.getElementById("highscore").innerText="High Score: "+highScore;
+
+// Smooth difficulty ramp
+let obstacleFrequency = 0.25;
+let speedRamp = 0.00001;
+
+// ---------------- GAME LOOP ----------------
+function animate(){
+    if(!gameRunning) return;
+    requestAnimationFrame(animate);
+
+    // ball movement
+    if(moveLeft) ball.position.x -= 0.12;
+    if(moveRight) ball.position.x += 0.12;
+
+    // forward movement and ramp
+    ball.position.z -= speed;
+    speed += speedRamp;
+
+    score++;
+    document.getElementById("score").innerText="Score: "+score;
+
+    // new platforms
+    if(ball.position.z < platforms[platforms.length-1].position.z+60)
+        createPlatform(platforms[platforms.length-1].position.z-15);
+
+    // platform collision
+    let currentPlatform = platforms.find(p=>Math.abs(ball.position.z-p.position.z)<7);
+    if(!currentPlatform || Math.abs(ball.position.x-currentPlatform.position.x)>3){
+        spawnTrail(ball.position.x, ball.position.y, ball.position.z);
+        endGame();
+    }
+
+    // obstacle collision
+    for(let obs of obstacles){
+        if(Math.abs(ball.position.x-obs.position.x)<1 && Math.abs(ball.position.z-obs.position.z)<1){
+            spawnTrail(ball.position.x, ball.position.y, ball.position.z);
+            endGame();
+        }
+    }
+
+    // particle trail
+    spawnTrail(ball.position.x, ball.position.y, ball.position.z);
+    trailParticles.forEach((p,i)=>{
+        p.position.y += p.velocity.y;
+        p.position.z += 0.01; // move slightly backward for effect
+        if(p.position.z > ball.position.z+10){scene.remove(p);trailParticles.splice(i,1);}
+    });
+
+    // camera follow
+    camera.position.z = ball.position.z + 10;
+    camera.position.x = ball.position.x;
+    camera.lookAt(ball.position);
+
+    renderer.render(scene,camera);
+}
+
+// ---------------- GAME OVER ----------------
+function endGame(){
+    gameRunning=false;
+    crashSound.play();
+    document.getElementById("gameOver").style.display="block";
+    if(score>highScore){highScore=score;localStorage.setItem("highscore",highScore);document.getElementById("highscore").innerText="High Score: "+highScore;}
+}
+
+// ---------------- RESTART ----------------
+function restart(){ location.reload(); }
+
+animate();
+
+// ---------------- RESIZE ----------------
+window.addEventListener("resize", ()=>{
+    camera.aspect=window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
