@@ -2,215 +2,27 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Ultimate Slope 3D Pro</title>
-<style>
-  body { margin:0; overflow:hidden; background:black; font-family:sans-serif; touch-action:none; }
-  #score { position:absolute; top:20px; left:20px; color:#0f0; font-size:24px; z-index:2; }
-  #fullscreenBtn { position:absolute; top:20px; right:20px; padding:10px 20px; font-size:16px; z-index:2; cursor:pointer; background:#0f0; color:black; border:none; border-radius:5px; }
-  #fullscreenBtn:hover { background:#0c0; }
-</style>
+<title>Ultra Slope 3D Deluxe</title>
+<link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-<div id="score">Score: 0</div>
-<button id="fullscreenBtn">Fullscreen</button>
+<div id="menu">
+  <h1>Ultra Slope 3D</h1>
+  <button id="playBtn">Play</button>
+  <button id="optionsBtn">Options</button>
+  <button id="highscoreBtn">High Score</button>
+</div>
+<div id="gameUI">
+  <div id="score">Score: 0</div>
+  <div id="highscore">High Score: 0</div>
+  <button id="fullscreenBtn">Fullscreen</button>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/postprocessing/EffectComposer.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/postprocessing/RenderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
 
-<script>
-// --- Scene, Camera, Renderer ---
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x000000);
-
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 2000);
-camera.position.set(0,5,15);
-
-const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
-
-// --- Postprocessing Bloom ---
-const composer = new THREE.EffectComposer(renderer);
-const renderPass = new THREE.RenderPass(scene, camera);
-composer.addPass(renderPass);
-const bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth,window.innerHeight),1.2,0.4,0.85);
-composer.addPass(bloomPass);
-
-// --- Lights ---
-const ambientLight = new THREE.AmbientLight(0xffffff,0.5);
-scene.add(ambientLight);
-const pointLight = new THREE.PointLight(0x00ff00,2,200);
-pointLight.position.set(0,15,15);
-scene.add(pointLight);
-
-// --- Ball ---
-const ballGeo = new THREE.SphereGeometry(1.2,32,32);
-const ballMat = new THREE.MeshStandardMaterial({color:0x00ff00, emissive:0x00ff00, emissiveIntensity:1});
-const ball = new THREE.Mesh(ballGeo, ballMat);
-ball.position.set(0,1.2,0);
-scene.add(ball);
-
-// --- Glow Trail ---
-const trailMat = new THREE.MeshBasicMaterial({color:0x00ff00, transparent:true, opacity:0.3});
-let trailMeshes = [];
-
-// --- Tunnel ---
-const walls = [];
-const wallGeo = new THREE.BoxGeometry(16,8,20);
-for(let i=0;i<50;i++){
-  const color = new THREE.Color().setHSL(Math.random(),1,0.5);
-  const left = new THREE.Mesh(wallGeo,new THREE.MeshStandardMaterial({color,color,colorWrite:true,emissive:color,emissiveIntensity:0.8}));
-  left.position.set(-10,4,-i*20);
-  scene.add(left); walls.push(left);
-  const right = new THREE.Mesh(wallGeo,new THREE.MeshStandardMaterial({color,color,colorWrite:true,emissive:color,emissiveIntensity:0.8}));
-  right.position.set(10,4,-i*20);
-  scene.add(right); walls.push(right);
-}
-
-// --- Platforms ---
-let platforms = [];
-const platformLength=20, platformWidth=10, gapChance=0.15;
-function createPlatform(z){
-  const geo = new THREE.BoxGeometry(platformWidth,1,platformLength);
-  const mat = new THREE.MeshStandardMaterial({color:0x222222, emissive:0x00ffff, emissiveIntensity:0.6});
-  const p = new THREE.Mesh(geo, mat);
-  p.position.z=z;
-  p.rotation.y = (Math.random()-0.5)*0.3;
-  if(Math.random()<gapChance)p.visible=false;
-  scene.add(p);
-  platforms.push(p);
-}
-for(let i=0;i<50;i++) createPlatform(-i*platformLength);
-
-// --- Particles ---
-const particleGeo = new THREE.BufferGeometry();
-const particleCount=200;
-const positions = new Float32Array(particleCount*3);
-particleGeo.setAttribute('position', new THREE.BufferAttribute(positions,3));
-const particleMat = new THREE.PointsMaterial({color:0xff0000, size:0.25});
-const particles = new THREE.Points(particleGeo,particleMat);
-scene.add(particles);
-let particleActive=false;
-
-// --- Controls ---
-let move=0;
-document.addEventListener("keydown",e=>{
-  if(e.key==="ArrowLeft") move=-0.4;
-  if(e.key==="ArrowRight") move=0.4;
-});
-document.addEventListener("keyup",()=>move=0);
-
-// --- Touch ---
-let touchStartX=null;
-document.addEventListener("touchstart", e=>{ touchStartX=e.touches[0].clientX; });
-document.addEventListener("touchmove", e=>{ 
-  if(touchStartX!==null){ move=(e.touches[0].clientX-touchStartX)*0.003; }
-});
-document.addEventListener("touchend",()=>{ move=0; touchStartX=null; });
-
-// --- Score ---
-let score=0;
-const scoreEl=document.getElementById("score");
-
-// --- Fullscreen ---
-document.getElementById("fullscreenBtn").addEventListener("click", ()=>{
-  if(!document.fullscreenElement) document.body.requestFullscreen();
-  else document.exitFullscreen();
-});
-
-// --- Camera Shake ---
-let shake=0;
-function applyShake(){
-  if(shake>0){
-    camera.position.x += (Math.random()-0.5)*shake;
-    camera.position.y += (Math.random()-0.5)*shake;
-    shake*=0.9;
-  }
-}
-
-// --- Animate ---
-let speed=0.6;
-function animate(){
-  requestAnimationFrame(animate);
-
-  // Ball movement
-  ball.position.x+=move;
-
-  // Move platforms
-  platforms.forEach(p=>{
-    p.position.z+=speed;
-    if(p.position.z>10){
-      p.position.z-=50*platformLength;
-      p.visible=Math.random()>=gapChance;
-      p.rotation.y=(Math.random()-0.5)*0.3;
-    }
-  });
-
-  // Move walls
-  walls.forEach(w=>{
-    w.position.z+=speed;
-    if(w.position.z>10) w.position.z-=50*20;
-    // Change neon color dynamically
-    w.material.color.setHSL(Math.random(),1,0.5);
-    w.material.emissive.setHSL(Math.random(),1,0.5);
-  });
-
-  // Trail
-  const trailSphere = new THREE.Mesh(new THREE.SphereGeometry(0.5,16,16), trailMat);
-  trailSphere.position.copy(ball.position);
-  scene.add(trailSphere);
-  trailMeshes.push(trailSphere);
-  if(trailMeshes.length>60) scene.remove(trailMeshes.shift());
-
-  // Speed & score
-  speed+=0.001;
-  score+=Math.floor(speed*2);
-  scoreEl.textContent="Score: "+score;
-
-  // Collision
-  let onPlatform=false;
-  for(let p of platforms){
-    if(p.visible &&
-       ball.position.x+1>p.position.x-platformWidth/2 &&
-       ball.position.x-1<p.position.x+platformWidth/2 &&
-       ball.position.z+1>p.position.z-platformLength/2 &&
-       ball.position.z-1<p.position.z+platformLength/2){
-      onPlatform=true; break;
-    }
-  }
-
-  if(!onPlatform && !particleActive){
-    particleActive=true;
-    shake=0.5;
-    for(let i=0;i<particleCount;i++){
-      positions[i*3]=ball.position.x+(Math.random()-0.5)*2;
-      positions[i*3+1]=ball.position.y+(Math.random()-0.5)*2;
-      positions[i*3+2]=ball.position.z+(Math.random()-0.5)*2;
-    }
-    particleGeo.attributes.position.needsUpdate=true;
-    setTimeout(()=>location.reload(),1500);
-  }
-
-  applyShake();
-  camera.position.z=ball.position.z+15;
-  camera.position.x=ball.position.x;
-  camera.position.y=ball.position.y+5;
-  camera.lookAt(ball.position);
-
-  composer.render();
-}
-
-// Start animation
-animate();
-
-// --- Resize ---
-window.addEventListener("resize", ()=>{
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  camera.aspect=window.innerWidth/window.innerHeight;
-  camera.updateProjectionMatrix();
-});
-</script>
+<script type="module" src="js/main.js"></script>
 </body>
 </html>
