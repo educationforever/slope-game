@@ -1,80 +1,106 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <!-- ads, defer maybe?-->
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8362959866002557" crossorigin="anonymous"></script>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chris Games</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', sans-serif;
+}
 
+body {
+    background: linear-gradient(135deg, #0f0f0f, #1a1a1a);
+    color: white;
+    min-height: 100vh;
+}
 
-    <!-- Meta Tags for SEO -->
-    <meta charset="UTF-8" data-rh="true" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0"
-      data-rh="true"
-    />
-    <!-- do not change!!!-->
-    <meta
-      name="description"
-      content="Study hard and learn faster! With Quizlet Clone, you can study for your classes and get better grades! All with a fun and engaging interface!"
-      data-rh="true"
-    />
-    <meta
-      name="keywords"
-      content="school site studying pratice quizlet"
-      data-rh="true"
-    />
+header {
+    padding: 30px;
+    text-align: center;
+}
 
-    <!-- Open Graph Meta Tags for Social Sharing -->
-    <meta property="og:title" content="duck" data-rh="true" />
-    <meta
-      property="og:description"
-      content="Study hard and learn faster! With Quizlet Clone, you can study for your classes and get better grades! All with a fun and engaging interface!"
-      data-rh="true"
-    />
-    <meta property="og:image" content="/imgs/og_image.png" data-rh="true" />
-    <meta property="og:type" content="website" data-rh="true" />
+header h1 {
+    font-size: 2.5rem;
+    margin-bottom: 15px;
+}
 
-    <!-- Twitter Card Tags for Sharing -->
-    <meta name="twitter:card" content="summary_large_image" data-rh="true" />
-    <meta name="twitter:title" content="duck" data-rh="true" />
-    <meta
-      name="twitter:description"
-      content="Study hard and learn faster! With Quizlet Clone, you can study for your classes and get better grades! All with a fun and engaging interface!"
-      data-rh="true"
-    />
-    <meta name="twitter:image" content="/imgs/og_image.png" data-rh="true" />
+#search {
+    padding: 12px;
+    width: 90%;
+    max-width: 400px;
+    border-radius: 12px;
+    border: none;
+    outline: none;
+    font-size: 16px;
+}
 
-    <!--* Favicon -->
-    <link rel="icon" type="image/x-icon" href="/imgs/duck.webp" id="favicon" />
-    <link rel="mask-icon" type="" href="/imgs/duck.webp" color="#111" />
+.game-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 25px;
+    padding: 40px;
+}
 
-    <title>duck</title>
-    <!-- Google tag (gtag.js) -->
-    <script>
-      (function () {
-        const isC = location.hostname.includes(".cloudfront.net");
-        const GA_ID = isC ? "G-06CRR7PB6E" : "G-9KMPQDZXZM";
+.game-card {
+    text-decoration: none;
+    color: white;
+    background: #222;
+    border-radius: 20px;
+    padding: 30px;
+    transition: 0.3s ease;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+}
 
-        const gtagScript = document.createElement("script");
-        gtagScript.async = true;
-        gtagScript.src = `https://www.googletagmanager.com/gtag/js?id=${GA_ID}`;
-        document.head.appendChild(gtagScript);
+.game-card:hover {
+    transform: translateY(-10px);
+    background: #2c2c2c;
+}
 
-        window.dataLayer = window.dataLayer || [];
-        function gtag() {
-          dataLayer.push(arguments);
-        }
-        window.gtag = gtag;
+.card-content h2 {
+    margin-bottom: 10px;
+}
 
-        gtag("js", new Date());
-        gtag("config", GA_ID);
-      })();
-    </script>
-    <script type="module" crossorigin src="/assets/index-DYbfHsel.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-CLWSCzEd.css">
-  </head>
-  <body>
-    <div id="root"></div>
-  <script defer src="https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015" integrity="sha512-ZpsOmlRQV6y907TI0dKBHq9Md29nnaEIPlkf84rnaERnq6zvWvPUqr2ft8M1aS28oN72PdrCzSjY4U6VaAw1EQ==" data-cf-beacon='{"version":"2024.11.0","token":"ab09c793d8ef437f834f5add25048732","r":1,"server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+<header>
+    <h1>Chris Games</h1>
+    <input type="text" id="search" placeholder="Search games...">
+</header>
+
+<main class="game-grid">
+
+    <a href="games/game1/index.html" class="game-card">
+        <div class="card-content">
+            <h2>Game One</h2>
+            <p>Fast arcade action</p>
+        </div>
+    </a>
+
+    <a href="games/game2/index.html" class="game-card">
+        <div class="card-content">
+            <h2>Game Two</h2>
+            <p>Chill puzzle game</p>
+        </div>
+    </a>
+
+</main>
+
+<script>
+const search = document.getElementById("search");
+search.addEventListener("keyup", function() {
+    let filter = search.value.toLowerCase();
+    let cards = document.querySelectorAll(".game-card");
+
+    cards.forEach(card => {
+        let text = card.innerText.toLowerCase();
+        card.style.display = text.includes(filter) ? "block" : "none";
+    });
+});
+</script>
+
 </body>
 </html>
